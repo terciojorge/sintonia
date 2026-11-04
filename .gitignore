@@ -1,6 +1,8 @@
 # Chaves e dados locais: nunca publicar
 chaves-locais.json
 app/js/local-config.js
+# chaves da interface web do app Android (a workflow também nunca publica este arquivo)
+**/js/local-config.js
 *.token
 tv-*.json
 dist/

@@ -1,6 +1,0 @@
-{
-  "name": "com.atl.player.service",
-  "version": "1.0.0",
-  "description": "Servico do Atl Player",
-  "main": "service.js"
-}

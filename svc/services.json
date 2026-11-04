@@ -1,7 +1,0 @@
-{
-  "id": "com.atl.player.service",
-  "description": "Recebe a lista enviada pelo celular",
-  "services": [
-    { "name": "com.atl.player.service", "description": "Pagina local para adicionar lista" }
-  ]
-}

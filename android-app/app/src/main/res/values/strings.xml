@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">my-fire-iptv</string>
+    <string name="lembrete_titulo">Lembrete de jogo</string>
+    <string name="lembrete_canal_nome">Lembretes de jogos</string>
+    <string name="lembrete_canal_descricao">Avisa pouco antes de começar um jogo que você pediu para lembrar.</string>
+</resources>

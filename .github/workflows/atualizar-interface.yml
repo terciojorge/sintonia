@@ -1,0 +1,75 @@
+name: Atualizar interface (OTA)
+
+# Publica no GitHub Pages os arquivos da interface web (android-app/app/src/main/assets/app/) e dois arquivos de controle:
+#   version.json   -> só o hash do commit; o app compara com a versão que já instalou
+#   arquivos.json  -> lista de arquivos com SHA-256, para o app baixar a interface e conferir cada arquivo
+# O app Android (AtualizacaoInterfaceWorker) consulta esse site a cada 24 h.
+#
+# Requisito único no GitHub: Settings > Pages > Source = "Deploy from a branch" > branch gh-pages / (root).
+
+on:
+  push:
+    branches: [main]
+    # só publica quando a interface muda: mudanças só no código Kotlin não geram versão nova
+    paths:
+      - 'android-app/app/src/main/assets/app/**'
+      - '.github/workflows/atualizar-interface.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: atualizar-interface
+  cancel-in-progress: true
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Montar o site
+        run: |
+          set -euo pipefail
+          origem="android-app/app/src/main/assets/app"
+          mkdir -p site
+          cp -r "$origem"/. site/
+          # chaves locais nunca vão para um site público
+          rm -f site/js/local-config.js
+          # sem isso o Pages (Jekyll) ignoraria pastas e arquivos iniciados por "_" ou ".".
+          touch site/.nojekyll
+
+          # arquivos.json: caminho, tamanho e SHA-256 de cada arquivo da interface
+          node <<'JS'
+          const fs = require('fs'), path = require('path'), crypto = require('crypto');
+          const raiz = 'site', arquivos = [];
+          (function varrer(dir) {
+            for (const nome of fs.readdirSync(dir).sort()) {
+              const caminho = path.join(dir, nome);
+              if (fs.statSync(caminho).isDirectory()) { varrer(caminho); continue; }
+              if (nome === '.nojekyll') continue;
+              const dados = fs.readFileSync(caminho);
+              arquivos.push({
+                caminho: path.relative(raiz, caminho).split(path.sep).join('/'),
+                tamanho: dados.length,
+                sha256: crypto.createHash('sha256').update(dados).digest('hex')
+              });
+            }
+          })(raiz);
+          fs.writeFileSync(path.join(raiz, 'arquivos.json'), JSON.stringify({ versao: process.env.GITHUB_SHA, arquivos }, null, 1));
+          console.log('Interface com ' + arquivos.length + ' arquivos, versão ' + process.env.GITHUB_SHA);
+          JS
+
+          # version.json: apenas o hash do commit
+          printf '{"versao":"%s"}\n' "$GITHUB_SHA" > site/version.json
+
+      - name: Publicar no GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          publish_branch: gh-pages
+          force_orphan: true
+          commit_message: 'Interface ${{ github.sha }}'
