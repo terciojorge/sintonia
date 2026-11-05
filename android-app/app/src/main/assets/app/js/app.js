@@ -2624,7 +2624,14 @@ window.sintoniaTecla = function (codigo, tipo, repeticao) {
   var ev = new KeyboardEvent(tipo === 'keyup' ? 'keyup' : 'keydown', { bubbles: true, cancelable: true, repeat: !!repeticao });
   Object.defineProperty(ev, 'keyCode', { get: function () { return codigo; } });
   Object.defineProperty(ev, 'which', { get: function () { return codigo; } });
-  alvo.dispatchEvent(ev);
+  var naoTratada = alvo.dispatchEvent(ev); // false se algum tratador chamou preventDefault()
+  // Evento criado por script não tem a ação padrão do navegador: o OK (Enter) não viraria clique no botão focado.
+  // Se o app.js não tratou o OK por conta própria, faz aqui o clique que o navegador faria.
+  if (naoTratada && codigo === 13 && tipo !== 'keyup' && !repeticao && alvo !== document.body && alvo.click &&
+      alvo.tagName !== 'INPUT' && alvo.tagName !== 'TEXTAREA') {
+    console.log('Sintonia: OK sobre <' + alvo.tagName.toLowerCase() + (alvo.id ? '#' + alvo.id : '') + '> virou clique');
+    alvo.click();
+  }
 };
 
 document.addEventListener('keydown', function (e) {

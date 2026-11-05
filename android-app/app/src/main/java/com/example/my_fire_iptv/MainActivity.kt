@@ -3,6 +3,7 @@ package com.example.my_fire_iptv
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Build
@@ -173,8 +174,18 @@ class MainActivity : AppCompatActivity() {
         // Uma interface baixada por um APK anterior não pode esconder a que veio neste APK.
         GerenciadorInterface.descartarSeApkMudou(this)
 
+        // Permite inspecionar a interface pelo Chrome (chrome://inspect), mas só em builds de debug:
+        // num APK de release a ponte nativa não pode ficar exposta à depuração por USB.
+        WebView.setWebContentsDebuggingEnabled(
+            (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        )
+
         configurarPlayer()
         configurarWebView(webView)
+        // O controle remoto só chega à interface se o WebView tiver o foco.
+        webView.isFocusable = true
+        webView.isFocusableInTouchMode = true
+        webView.requestFocus()
         iniciarServidor()
 
         // Em versões recentes do Android o botão Voltar pode chegar pelo dispatcher
@@ -537,12 +548,21 @@ class MainActivity : AppCompatActivity() {
         val codigoJs = CODIGOS_TECLAS[codigoNativo] ?: return super.dispatchKeyEvent(evento)
 
         // Sem a página pronta não há quem receba a tecla; consome para evitar efeitos colaterais.
-        if (!paginaCarregada) return true
+        if (!paginaCarregada) {
+            Log.d(TAG, "Tecla ${KeyEvent.keyCodeToString(codigoNativo)} ignorada: interface ainda não carregou.")
+            return true
+        }
 
         when (evento.action) {
-            KeyEvent.ACTION_DOWN -> enviarTeclaParaWeb(codigoJs, "keydown", evento.repeatCount > 0)
+            KeyEvent.ACTION_DOWN -> {
+                if (evento.repeatCount == 0) {
+                    Log.d(TAG, "Tecla ${KeyEvent.keyCodeToString(codigoNativo)} -> JS $codigoJs")
+                }
+                enviarTeclaParaWeb(codigoJs, "keydown", evento.repeatCount > 0)
+            }
             KeyEvent.ACTION_UP -> enviarTeclaParaWeb(codigoJs, "keyup", false)
         }
+        // Consumida: a tecla já foi entregue ao JavaScript e não deve seguir para o sistema.
         return true
     }
 
