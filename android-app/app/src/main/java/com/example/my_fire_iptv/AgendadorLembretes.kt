@@ -45,7 +45,6 @@ object AgendadorLembretes {
         try {
             if (podeExato) {
                 alarmes.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, horarioMs, intencao)
-                Log.i(TAG, "Lembrete \"$id\" agendado (alarme exato) para $horarioMs.")
             } else {
                 alarmes.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, horarioMs, intencao)
                 Log.w(TAG, "Lembrete \"$id\" agendado (alarme aproximado: sem permissão de alarme exato).")
@@ -61,7 +60,6 @@ object AgendadorLembretes {
         val alarmes = contexto.getSystemService(AlarmManager::class.java)
         alarmes.cancel(criarIntencaoPendente(contexto, id, ""))
         removerRegistro(contexto, id)
-        Log.i(TAG, "Lembrete \"$id\" cancelado.")
     }
 
     /** Recria os alarmes salvos (após reiniciar a TV ou atualizar o app); descarta os já vencidos. */
@@ -79,7 +77,6 @@ object AgendadorLembretes {
             agendar(contexto, id, partes.getOrElse(1) { "" }, horario)
             recriados++
         }
-        Log.i(TAG, "Lembretes reagendados: $recriados.")
     }
 
     /** Remove o registro de um lembrete que já disparou (ou foi cancelado). */

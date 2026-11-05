@@ -389,7 +389,7 @@ var chaveRecusada = { tmdb: '', omdb: '' };
 function notaRecusa(api, chave, e) {
   if (!/HTTP 401/.test(e.message) || chaveRecusada[api] === chave) return;
   chaveRecusada[api] = chave;
-  console.log('Sintonia: a chave do ' + (api === 'tmdb' ? 'TMDB' : 'OMDb') + ' foi recusada (HTTP 401); confira em Ajustes > Chaves de API');
+  console.warn('Sintonia: a chave do ' + (api === 'tmdb' ? 'TMDB' : 'OMDb') + ' foi recusada (HTTP 401); confira em Ajustes > Chaves de API');
   toast('Chave do ' + (api === 'tmdb' ? 'TMDB' : 'OMDb') + ' Recusada. Confira em Ajustes.', 5000);
 }
 function tmdbFetch(path, params) {
@@ -714,7 +714,7 @@ function itemsFor(kind, cat) {
 /* channel screen: filters and list on the left; preview and programme guide on the right */
 function renderChannels(view) {
   if (groupAdult(view, S.cat[view])) S.cat[view] = '__groups';
-  var sel = S.cat[view] || '__groups', html = '<div class="tv"><div class="tvleft"><div class="tvhead"><h1>' + TITLES[view] + '</h1>' + '<button class="f tvrefresh" id="refreshBtn">Atualizar</button></div>';
+  var sel = S.cat[view] || '__groups', html = '<div class="tv"><div class="tvleft"><div class="tvhead"><h1>' + TITLES[view] + '</h1>' + '<button class="f tvrefresh" id="refreshBtn">Recarregar Lista</button></div>';
   html += '<p class="tvpath" id="tvPath"></p><div class="scroll grid-wrap" id="gridWrap"></div></div><div class="tvright"><div class="pvslot"></div><h2 id="pvName">Escolha um Canal</h2><p class="muted" id="pvHint">OK Mostra a Prévia. OK de Novo Abre em Tela Cheia.</p><div id="epgList"></div></div></div>';
   $('#content').innerHTML = html;
   showCat(view, sel);
@@ -1269,7 +1269,7 @@ function setPanel(sec) {
   if (sec === 'adult') return '<h2 class="settitle">Conteúdo Adulto</h2>' +
     '<div class="row"><button class="f btn" id="adultLock">Bloqueio com Senha: ' + (c.adultLock ? 'ligado' : 'desligado') + '</button><button class="f btn" id="adultPin">Trocar Senha</button></div>';
   return '<h2 class="settitle">Sobre o App</h2>' +
-    row('Versão ' + versaoExibida(), '<button class="f btn" id="checkUpdate">Verificar Atualização</button>') +
+    row('Versão ' + versaoExibida(), '<button type="button" class="f btn" id="checkUpdate" onclick="dispararAtualizacao(event)">Buscar Nova Versão do App</button>') +
     '<p class="note">Tudo Fica Salvo Só na TV. O App É Apenas um Player: Ele Não Fornece Canais Nem Conteúdo.</p>';
 }
 function renderSettings() {
@@ -1293,21 +1293,29 @@ function versaoExibida() {
   try { ifc = b.obterVersaoInterface(); } catch (e) {}
   return (app || '?') + (ifc ? ' · Interface ' + ifc : '');
 }
-function checkUpdate() {
-  if (!NATIVO || !window.SintoniaBridge.verificarAtualizacaoInterface) { toast('Só Funciona na TV'); return; }
-  setBusy('Verificando Atualização');
-  console.log('Sintonia: verificação da interface pedida pelo usuário');
+function checkUpdate(evento) {
+  // O botão nunca deve submeter nada nem recarregar o index.html: a verificação acontece toda no Android.
+  if (evento && evento.preventDefault) evento.preventDefault();
+  if (!NATIVO || !window.SintoniaBridge.verificarAtualizacaoInterface) {
+    console.error('Sintonia: SintoniaBridge.verificarAtualizacaoInterface não encontrada.');
+    toast('Só Funciona na TV'); return;
+  }
+  setBusy('Buscando Nova Versão do App');
   window.SintoniaBridge.verificarAtualizacaoInterface();
 }
+// Chamada direta do botão (onclick="dispararAtualizacao(event)"), sem depender de listeners delegados.
+// Fica em window porque o app.js inteiro roda dentro de uma função e o onclick só enxerga o escopo global.
+window.dispararAtualizacao = function (evento) {
+  checkUpdate(evento);
+};
 window.sintoniaResultadoAtualizacao = function (estado, detalhe) {
   setBusy('');
-  console.log('Sintonia: resultado da atualização da interface: ' + estado + ' (' + detalhe + ')');
   if (estado === 'ATUALIZADA') { toast('Você Já Está na Versão Mais Nova'); return; }
-  if (estado === 'ADIADA') { toast('Há um Vídeo em Reprodução: a Atualização Fica para Depois', 6000); return; }
-  if (estado !== 'INSTALADA') { toast('Não Consegui Atualizar: ' + (detalhe || 'erro desconhecido'), 6000); return; }
+  if (estado === 'ADIADA') { toast('Há um Vídeo em Reprodução: a Nova Versão Fica para Depois', 6000); return; }
+  if (estado !== 'INSTALADA') { toast('Não Consegui Buscar a Nova Versão: ' + (detalhe || 'erro desconhecido'), 6000); return; }
   // recarregar a interface recarrega também a lista: quem decide é o usuário
-  chooser('Atualização Pronta', [['depois', 'Usar na Próxima Vez que Abrir o App'], ['agora', 'Reiniciar Agora (Recarrega a Lista)']], 'depois', function (c) {
-    if (c !== 'agora') { toast('A Atualização Entra na Próxima Abertura'); return; }
+  chooser('Nova Versão Pronta', [['depois', 'Usar na Próxima Vez que Abrir o App'], ['agora', 'Reiniciar Agora (Recarrega a Lista)']], 'depois', function (c) {
+    if (c !== 'agora') { toast('A Nova Versão Entra na Próxima Abertura'); return; }
     try { sessionStorage.setItem('atl.after', JSON.stringify({ view: 'settings', spot: S.spot, cat: null, play: null, tv: false, full: false })); } catch (e) {}
     window.SintoniaBridge.reiniciarInterface();
   });
@@ -1318,7 +1326,6 @@ function saveKeys() {
   KEY_FIELDS.forEach(function (k) { var e = $('#k_' + k[0]); if (e) S.cfg[k[0]] = e.value.trim(); });
   save('cfg', S.cfg); toast('Chaves Salvas');
   chaveRecusada = { tmdb: '', omdb: '' }; // chave nova ou corrigida: volta a tentar
-  console.log('Sintonia: chaves de API salvas (' + KEY_FIELDS.filter(function (k) { return S.cfg[k[0]]; }).length + ' de ' + KEY_FIELDS.length + ' preenchidas)');
   renderSettings();
   var salvar = $('#saveKeys'); if (salvar) salvar.focus();
 }
@@ -1663,7 +1670,6 @@ function receiveList(l) {
 /* Chamado pelo Android quando o celular envia o formulário (nome e URL da lista).
  * receiveList valida o link, grava a lista no LocalStorage (save 'lists') e a ativa. */
 window.sintoniaReceberLista = function (nome, url) {
-  console.log('Sintonia: lista recebida do celular: "' + nome + '"'); // a URL fica fora do log: pode ter usuário e senha
   receiveList({ nome: nome, link: url });
 };
 function closeRemote() {
@@ -1675,7 +1681,7 @@ function closeRemote() {
 /* ================= refresh: drop everything the app holds and load the list again ================= */
 function refreshApp() {
   var live = playerShown() && P.item && P.item.kind === 'live';
-  setBusy('Atualizando: Limpando o Cache e Recarregando a Lista');
+  setBusy('Recarregando a Lista: Limpando o Cache');
   try { sessionStorage.setItem('atl.after', JSON.stringify({ view: S.view || 'home', spot: S.spot, cat: groupAdult(S.view, S.cat[S.view]) ? null : S.cat[S.view], play: live && !P.item.adult ? P.item.kind + ':' + P.item.id : null, tv: !!P.tv, full: playerOpen() })); } catch (e) {}
   if (playerShown()) saveProgress();
   teardown();
@@ -1696,7 +1702,7 @@ function criarVideoNativo() {
   var ponte = window.SintoniaBridge, ouvintes = {}, src = '', querTocar = false, metaEnviada = false, ultimaPos = -1;
   function emitir(nome) {
     (ouvintes[nome] || []).slice().forEach(function (fn) {
-      try { fn.call(v, { type: nome, target: v }); } catch (e) { console.log('Sintonia: erro no evento "' + nome + '": ' + e); }
+      try { fn.call(v, { type: nome, target: v }); } catch (e) { console.error('Sintonia: erro no evento "' + nome + '": ' + e); }
     });
   }
   var v = {
@@ -1758,7 +1764,6 @@ function criarVideoNativo() {
 
 /* Chamado pelo Android a cada mudança de estado do player. */
 window.sintoniaStatusVideo = function (status, detalhe) {
-  console.log('Sintonia: status do vídeo = ' + status + (detalhe ? ' (' + detalhe + ')' : ''));
   if (NATIVO) video.aoStatus(status, detalhe);
 };
 
@@ -2050,7 +2055,7 @@ function gearMenu(at) {
   opts.push({ name: isFav(key) ? 'Tirar dos Favoritos' : 'Favorito', fn: toggle(toggleFav, 2) });
   if (!live) opts.push({ name: isLater(key) ? 'Tirar de Assistir Depois' : 'Assistir Depois', fn: toggle(toggleLater, 3) });
   if (P.ep) opts.push({ name: 'Episódios', fn: playerEpisodes });
-  if (live) opts.push({ name: 'Atualizar', fn: refreshApp });
+  if (live) opts.push({ name: 'Recarregar Lista', fn: refreshApp });
   menu('Opções', opts);
   var b = at != null && $('#menu .opt[data-i="' + at + '"]'); if (b) b.focus();
 }
@@ -2187,7 +2192,6 @@ function wyzieList(lang) {
   return getRatings(P.item, true).then(function (r) {
     var id = r && (r.tmdbId || r.imdbId);
     if (!id) throw new Error('Título Não Encontrado');
-    console.log('Sintonia: buscando legendas no Wyzie (' + (r.tmdbId ? 'TMDB' : 'IMDb') + ' ' + id + ', idioma ' + lang + ')');
     return getJSON('https://sub.wyzie.io/search?id=' + encodeURIComponent(id) + '&language=' + lang.slice(0, 2) + '&format=srt&key=' + encodeURIComponent(S.cfg.wyzieKey) + (P.ep ? '&season=' + P.ep.season + '&episode=' + P.ep.num : ''), {});
   }).then(function (list) {
     var ep = P.ep;
@@ -2204,7 +2208,6 @@ function limparAnuncioWyzie(texto) {
   var t = String(texto || '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').replace(/^\s+/, '');
   var blocos = t.split(/\n{2,}/);
   if (!blocos.length || !/wyzie/i.test(blocos[0])) return t; // primeiro bloco limpo: nada a fazer
-  console.log('Sintonia: anúncio do Wyzie removido da primeira linha da legenda');
   blocos.shift();
   var n = 0;
   return blocos.filter(Boolean).map(function (b) {
@@ -2295,7 +2298,6 @@ function autoTitleSub() {
 /* Única porta de entrada do OpenSubtitles: o menu só oferece a busca quando o Wyzie falhou, e a busca só começa
  * se o usuário escolher a opção (cada download gasta 1 dos 5 do dia). */
 function askOpenSubs(title, lang) {
-  console.log('Sintonia: Wyzie sem resultado (' + title + '); oferecendo o OpenSubtitles como reserva');
   var opts = S.cfg.osKey ? [{ name: 'Procurar no OpenSubtitles (5 por Dia)', fn: function () { searchOpenSubs(lang); } }]
     : [{ name: 'Cadastre a Chave do OpenSubtitles em Ajustes', fn: subsMenu }];
   menu(title, opts.concat([{ name: 'Voltar', fn: subsMenu }]), subsMenu);
@@ -2325,7 +2327,6 @@ function searchOpenSubs(lang) {
   if (P.ep) q += '&season_number=' + P.ep.season + '&episode_number=' + P.ep.num + '&type=episode';
   else { q += '&type=movie'; if (P.item.year || ct.year) q += '&year=' + (P.item.year || ct.year); }
   menu('Buscando Legendas', []);
-  console.log('Sintonia: busca no OpenSubtitles pedida pelo usuário (idioma ' + lang + ')');
   getJSON(OS + '/subtitles?languages=' + lang + q, { headers: osHeaders() }).then(function (r) {
     var res = (r.data || []).slice(0, 14);
     if (!res.length) { menu('Nenhuma Legenda Encontrada', [{ name: 'Voltar', fn: subsMenu }]); return; }
@@ -2340,7 +2341,6 @@ function downloadSub(fileId, label) {
   var had = S.subs.files[fileId];
   if (had) { useExtSubs(had.text, had.label, fileId); closeMenu(); return; }
   menu('Baixando Legenda', []);
-  console.log('Sintonia: baixando legenda do OpenSubtitles (gasta 1 dos 5 downloads diários)');
   getJSON(OS + '/download', { method: 'POST', headers: osHeaders(), body: JSON.stringify({ file_id: fileId, sub_format: 'srt' }) })
     .then(function (r) { if (!r.link) throw new Error(r.message || 'limite diário atingido'); P.subsLeft = r.remaining; return timeoutFetch(r.link, {}, 30000); })
     .then(function (r) { return r.text(); })
@@ -2613,7 +2613,7 @@ var naTelaPrincipal = false;
  * e false se já estava na tela principal e não há mais para onde voltar (o app pode fechar). */
 window.sintoniaVoltar = function () {
   naTelaPrincipal = false;
-  try { onBack(); } catch (e) { console.log('Sintonia: erro ao processar Voltar: ' + e); }
+  try { onBack(); } catch (e) { console.error('Sintonia: erro ao processar Voltar: ' + e); }
   return !naTelaPrincipal;
 };
 
@@ -2629,7 +2629,6 @@ window.sintoniaTecla = function (codigo, tipo, repeticao) {
   // Se o app.js não tratou o OK por conta própria, faz aqui o clique que o navegador faria.
   if (naoTratada && codigo === 13 && tipo !== 'keyup' && !repeticao && alvo !== document.body && alvo.click &&
       alvo.tagName !== 'INPUT' && alvo.tagName !== 'TEXTAREA') {
-    console.log('Sintonia: OK sobre <' + alvo.tagName.toLowerCase() + (alvo.id ? '#' + alvo.id : '') + '> virou clique');
     alvo.click();
   }
 };
@@ -2742,7 +2741,8 @@ document.addEventListener('click', function (e) {
     save('cfg', S.cfg); return;
   }
   if (t.id === 'saveKeys') { saveKeys(); return; }
-  if (t.id === 'checkUpdate') { checkUpdate(); return; }
+  // 'checkUpdate' não é tratado aqui: o botão chama window.dispararAtualizacao direto pelo onclick (evita disparar duas vezes)
+  if (t.id === 'checkUpdate') return;
   if (t.id === 'reload') { reload(); return; }
   if (t.id === 'openRemote') { openRemote(); return; }
   if (t.id === 'clearSeen') { askClearSeen(); return; }
@@ -2788,7 +2788,7 @@ document.addEventListener('mouseover', function (e) { var t = e.target.closest &
 function openLaunchRem(idDireto) {
   var id = idDireto != null ? idDireto : (NATIVO ? window.SintoniaBridge.obterLembreteDeAbertura() : '');
   var r = id && remFor(id);
-  if (r) { console.log('Sintonia: abrindo o jogo do lembrete "' + id + '"'); $('#remind')._rem = r; watchRem(); }
+  if (r) { $('#remind')._rem = r; watchRem(); }
 }
 window.sintoniaAbrirLembrete = function (id) { openLaunchRem(String(id)); };
 
@@ -2805,7 +2805,7 @@ go(configured ? 'home' : 'settings');
 try { if (NATIVO && window.SintoniaBridge.interfaceCarregada) window.SintoniaBridge.interfaceCarregada(); } catch (e) {}
 setTimeout(function () { if (S.loadError) return; if (S.view === 'home') focusNav(); else focusContent(); }, 50);
 if (configured) {
-  setBusy(after ? 'Atualizando: Recarregando a Lista…' : 'Carregando Sua Lista');
+  setBusy(after ? 'Recarregando a Lista…' : 'Carregando Sua Lista');
   loadAll().then(function () {
     S.fresh = false;
     setBusy('');
@@ -2821,7 +2821,7 @@ if (configured) {
       selectChannel(item, S.live);
       if (after.full) enterFull();
     } else if (item) play(item, { list: S.live, index: Math.max(0, S.live.indexOf(item)), quiet: true });
-    if (after) toast('Atualizado ✓');
+    if (after) toast('Lista Recarregada ✓');
   }, function (e) { S.fresh = false; loadFailed(e); });
 }
 

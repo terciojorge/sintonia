@@ -33,13 +33,11 @@ class ServidorSintonia(
         val bytes = ByteArray(8).also { SecureRandom().nextBytes(it) }
         val novo = bytes.joinToString("") { "%02x".format(it) }
         token = novo
-        Log.i(TAG, "Pareamento aberto: servidor aguardando o celular.")
         return novo
     }
 
     /** Encerra o pareamento: a partir daqui nenhuma requisição é aceita. */
     fun encerrarPareamento() {
-        if (token != null) Log.i(TAG, "Pareamento encerrado.")
         token = null
     }
 
@@ -61,7 +59,6 @@ class ServidorSintonia(
     private fun atenderFormulario(sessao: IHTTPSession): Response {
         val tokenRecebido = sessao.parameters["t"]?.firstOrNull()
         if (!tokenValido(tokenRecebido)) return recusarSemToken()
-        Log.i(TAG, "Celular abriu a página de pareamento.")
         return resposta(Response.Status.OK, PAGINA_FORMULARIO.replace("{{TOKEN}}", tokenRecebido.orEmpty()))
     }
 
@@ -88,7 +85,6 @@ class ServidorSintonia(
             return resposta(Response.Status.BAD_REQUEST, paginaMensagem("Informe uma URL válida, começando com http:// ou https://.", erro = true))
         }
 
-        Log.i(TAG, "Lista recebida do celular: \"$nome\"")
         // A URL pode conter usuário e senha do provedor: nunca vai para o log.
         if (!aoReceberLista(nome, url)) {
             return resposta(Response.Status.SERVICE_UNAVAILABLE, paginaMensagem("A TV ainda não está pronta. Tente de novo em instantes.", erro = true))

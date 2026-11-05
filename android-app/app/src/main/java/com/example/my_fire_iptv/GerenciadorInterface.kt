@@ -104,7 +104,6 @@ object GerenciadorInterface {
         val p = prefs(contexto)
         if (p.getString(CHAVE_VERSAO, null).isNullOrEmpty() && !pasta(contexto).exists()) return
         if (p.getLong(CHAVE_APK, -1L) != carimboDoApk(contexto)) {
-            Log.i(TAG, "O app foi atualizado: descartando a interface baixada anteriormente.")
             descartar(contexto, "APK diferente do que baixou a interface", recusar = false)
         }
     }
@@ -148,6 +147,5 @@ object GerenciadorInterface {
             .remove(CHAVE_RECUSADA)
             .commit()
         antiga.deleteRecursively()
-        Log.i(TAG, "Interface $versao instalada em ${atual.absolutePath}.")
     }
 }

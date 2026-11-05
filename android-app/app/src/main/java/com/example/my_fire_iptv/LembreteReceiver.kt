@@ -25,7 +25,6 @@ class LembreteReceiver : BroadcastReceiver() {
 
         val id = intent.getStringExtra(AgendadorLembretes.EXTRA_ID).orEmpty()
         val titulo = intent.getStringExtra(AgendadorLembretes.EXTRA_TITULO).orEmpty()
-        Log.i(TAG, "Lembrete \"$id\" disparou.")
 
         // O alarme já foi consumido: não deve ser recriado ao reiniciar a TV.
         AgendadorLembretes.removerRegistro(contexto, id)

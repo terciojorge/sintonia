@@ -103,8 +103,8 @@ class MainActivity : AppCompatActivity() {
     private var permissaoNotificacaoPedida = false
 
     private val pedirPermissaoNotificacao =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { concedida ->
-            Log.i(TAG, "Permissão de notificações ${if (concedida) "concedida" else "negada"}.")
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+            // Sem ação: se for negada, o lembrete é agendado mesmo assim e o LembreteReceiver avisa que não pode exibir.
         }
 
     /** A interface web já avisou, por [SintoniaBridge.interfaceCarregada], que iniciou de verdade? */
@@ -213,7 +213,6 @@ class MainActivity : AppCompatActivity() {
     /** Abre a interface baixada, se válida; senão a empacotada no APK. */
     private fun carregarInterface() {
         val url = GerenciadorInterface.urlInicial(this)
-        Log.i(TAG, "Carregando a interface: $url")
         interfaceSinalizou = false
         webView.loadUrl(url)
     }
@@ -248,6 +247,7 @@ class MainActivity : AppCompatActivity() {
      * `window.sintoniaResultadoAtualizacao(estado, detalhe)`.
      */
     private fun verificarAtualizacaoAgora() {
+        // OneTimeWorkRequest com manual=true: roda na hora e devolve o resultado à tela (ver criarPedidoManual).
         val pedido = AtualizacaoInterfaceWorker.criarPedidoManual()
         val trabalhos = WorkManager.getInstance(applicationContext)
         trabalhos.enqueue(pedido)
@@ -265,7 +265,6 @@ class MainActivity : AppCompatActivity() {
                     estado = AtualizacaoInterfaceWorker.ESTADO_ERRO
                     detalhe = "a verificação não foi concluída"
                 }
-                Log.i(TAG, "Verificação manual da interface: $estado ($detalhe)")
                 if (paginaCarregada) {
                     webView.evaluateJavascript(
                         "if (window.sintoniaResultadoAtualizacao) " +
@@ -308,7 +307,6 @@ class MainActivity : AppCompatActivity() {
 
     /** Inicia (ou troca) a reprodução. Deve ser chamado na thread principal. */
     private fun iniciarReproducao(url: String) {
-        Log.i(TAG, "Reproduzindo: $url")
         ultimoStatus = null
         posicaoAtualMs = 0L
         duracaoTotalMs = -1L
@@ -370,7 +368,6 @@ class MainActivity : AppCompatActivity() {
         val argumentoDetalhe = if (detalhe != null) ", ${JSONObject.quote(detalhe)}" else ""
         val script =
             "if (window.sintoniaStatusVideo) window.sintoniaStatusVideo('$status'$argumentoDetalhe);"
-        Log.d(TAG, "Status do vídeo -> $status${detalhe?.let { " ($it)" }.orEmpty()}")
         webView.evaluateJavascript(script, null)
     }
 
@@ -403,7 +400,6 @@ class MainActivity : AppCompatActivity() {
         try {
             servidor.start(NanoHTTPD.SOCKET_READ_TIMEOUT, /* daemon = */ true)
             servidorAtivo = true
-            Log.i(TAG, "Servidor de pareamento iniciado na porta ${ServidorSintonia.PORTA}.")
         } catch (e: IOException) {
             servidorAtivo = false
             Log.e(TAG, "Não foi possível iniciar o servidor de pareamento na porta ${ServidorSintonia.PORTA}", e)
@@ -468,7 +464,13 @@ class MainActivity : AppCompatActivity() {
 
         view.webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(mensagem: ConsoleMessage): Boolean {
-                Log.d(TAG, "[JS] ${mensagem.message()} (${mensagem.sourceId()}:${mensagem.lineNumber()})")
+                // Só erros e avisos do JavaScript chegam ao Logcat; o console.log comum é descartado.
+                val origem = "[JS] ${mensagem.message()} (${mensagem.sourceId()}:${mensagem.lineNumber()})"
+                when (mensagem.messageLevel()) {
+                    ConsoleMessage.MessageLevel.ERROR -> Log.e(TAG, origem)
+                    ConsoleMessage.MessageLevel.WARNING -> Log.w(TAG, origem)
+                    else -> Unit
+                }
                 return true
             }
         }
@@ -485,7 +487,6 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView, url: String) {
                 paginaCarregada = true
-                Log.i(TAG, "Interface web carregada: $url")
                 view.requestFocus()
                 // Interface baixada: se em alguns segundos o JavaScript não avisar que iniciou, volta para a do APK.
                 if (ehInterfaceBaixada(url) && !interfaceSinalizou) {
@@ -507,7 +508,7 @@ class MainActivity : AppCompatActivity() {
                 val endereco = request.url.toString()
                 val permitido = endereco.startsWith(GerenciadorInterface.PREFIXO_ASSETS) || ehInterfaceBaixada(endereco)
                 if (!permitido) {
-                    Log.w(TAG, "Navegação externa bloqueada: ${request.url}")
+                    Log.w(TAG, "Navegação externa bloqueada.") // o endereço fica fora do log: pode ter dados do usuário
                 }
                 return !permitido
             }
@@ -548,18 +549,10 @@ class MainActivity : AppCompatActivity() {
         val codigoJs = CODIGOS_TECLAS[codigoNativo] ?: return super.dispatchKeyEvent(evento)
 
         // Sem a página pronta não há quem receba a tecla; consome para evitar efeitos colaterais.
-        if (!paginaCarregada) {
-            Log.d(TAG, "Tecla ${KeyEvent.keyCodeToString(codigoNativo)} ignorada: interface ainda não carregou.")
-            return true
-        }
+        if (!paginaCarregada) return true
 
         when (evento.action) {
-            KeyEvent.ACTION_DOWN -> {
-                if (evento.repeatCount == 0) {
-                    Log.d(TAG, "Tecla ${KeyEvent.keyCodeToString(codigoNativo)} -> JS $codigoJs")
-                }
-                enviarTeclaParaWeb(codigoJs, "keydown", evento.repeatCount > 0)
-            }
+            KeyEvent.ACTION_DOWN -> enviarTeclaParaWeb(codigoJs, "keydown", evento.repeatCount > 0)
             KeyEvent.ACTION_UP -> enviarTeclaParaWeb(codigoJs, "keyup", false)
         }
         // Consumida: a tecla já foi entregue ao JavaScript e não deve seguir para o sistema.
@@ -583,7 +576,6 @@ class MainActivity : AppCompatActivity() {
      */
     private fun tratarVoltar() {
         if (!paginaCarregada) {
-            Log.i(TAG, "Voltar: interface ainda não carregada, fechando o app.")
             finish()
             return
         }
@@ -592,9 +584,8 @@ class MainActivity : AppCompatActivity() {
         webView.evaluateJavascript(script) { resultado ->
             // evaluateJavascript devolve o texto em JSON, ex.: "\"true\"".
             when (resultado?.trim('"')) {
-                "true" -> Log.d(TAG, "Voltar: tratado pela interface web.")
+                "true" -> Unit // a interface tratou o Voltar (voltou uma tela, fechou um painel etc.)
                 else -> {
-                    Log.i(TAG, "Voltar: interface na tela principal, fechando o app.")
                     finish()
                 }
             }
@@ -615,7 +606,6 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         val id = intent.getStringExtra(AgendadorLembretes.EXTRA_ID) ?: return
-        Log.i(TAG, "Notificação do lembrete \"$id\" abriu o app.")
         if (paginaCarregada) {
             lembreteDeAbertura = null
             webView.evaluateJavascript(
@@ -710,7 +700,6 @@ class MainActivity : AppCompatActivity() {
         fun interfaceCarregada() {
             interfaceSinalizou = true
             handlerPrincipal.removeCallbacks(vigiaDaInterface)
-            Log.i(TAG, "Interface sinalizou que iniciou (versão: ${GerenciadorInterface.versaoParaExibir(applicationContext)}).")
         }
 
         /**
@@ -726,21 +715,13 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun reiniciarInterface() {
             runOnUiThread {
-                Log.i(TAG, "Interface pediu para ser recarregada.")
                 carregarInterface()
             }
-        }
-
-        /** Permite à interface registrar mensagens no Logcat do Android. */
-        @JavascriptInterface
-        fun registrarLog(mensagem: String?) {
-            Log.i(TAG, "[Interface] ${mensagem.orEmpty()}")
         }
 
         /** Fecha o aplicativo (a interface confirma que não há mais para onde voltar). */
         @JavascriptInterface
         fun sairDoApp() {
-            Log.i(TAG, "Interface solicitou o fechamento do app.")
             runOnUiThread { finish() }
         }
 

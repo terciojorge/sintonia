@@ -41,7 +41,6 @@ class AtualizacaoInterfaceWorker(contexto: Context, parametros: WorkerParameters
         val manual = inputData.getBoolean(ENTRADA_MANUAL, false)
         return try {
             val (estado, detalhe) = verificarEAtualizar()
-            Log.i(TAG, "Atualização da interface: $estado ($detalhe)")
             when {
                 // Em segundo plano, tenta de novo mais tarde (o vídeo pode ter terminado).
                 estado == ESTADO_ADIADA && !manual -> Result.retry()
@@ -66,7 +65,6 @@ class AtualizacaoInterfaceWorker(contexto: Context, parametros: WorkerParameters
         // 1) versão publicada x versão instalada
         val remota = lerVersaoRemota()
         val local = GerenciadorInterface.versaoInstalada(contexto)
-        Log.i(TAG, "Interface: versão remota=$remota, instalada=${local.ifEmpty { "(a do APK)" }}")
         if (remota == local) return ESTADO_ATUALIZADA to remota
         if (!inputData.getBoolean(ENTRADA_MANUAL, false) && remota == GerenciadorInterface.versaoRecusada(contexto)) {
             Log.w(TAG, "A versão $remota já falhou ao carregar neste aparelho; não será baixada de novo.")
@@ -75,7 +73,6 @@ class AtualizacaoInterfaceWorker(contexto: Context, parametros: WorkerParameters
 
         // 2) nunca baixa nem troca a interface durante um vídeo
         if (EstadoReproducao.reproduzindo) {
-            Log.i(TAG, "Há vídeo em reprodução; a atualização $remota fica para depois.")
             return ESTADO_ADIADA to remota
         }
 
@@ -98,7 +95,6 @@ class AtualizacaoInterfaceWorker(contexto: Context, parametros: WorkerParameters
             for (i in 0 until itens.length()) {
                 if (isStopped) throw IOException("Trabalho interrompido pelo sistema")
                 if (EstadoReproducao.reproduzindo) {
-                    Log.i(TAG, "Um vídeo começou durante o download; interrompendo a atualização $remota.")
                     return ESTADO_ADIADA to remota
                 }
                 val item = itens.getJSONObject(i)
@@ -194,7 +190,6 @@ class AtualizacaoInterfaceWorker(contexto: Context, parametros: WorkerParameters
             if (lidos != tamanho) throw IOException("${destino.name} incompleto: $lidos de $tamanho bytes")
             val sha256 = resumo.digest().joinToString("") { "%02x".format(it) }
             if (sha256 != sha256Esperado) throw IOException("${destino.name} corrompido (SHA-256 diferente)")
-            Log.d(TAG, "Interface: ${destino.name} baixado ($tamanho bytes) e conferido.")
         } finally {
             conexao.disconnect()
         }
@@ -271,7 +266,6 @@ class AtualizacaoInterfaceWorker(contexto: Context, parametros: WorkerParameters
             WorkManager.getInstance(contexto).enqueueUniquePeriodicWork(
                 NOME_TRABALHO_PERIODICO, ExistingPeriodicWorkPolicy.KEEP, pedido
             )
-            Log.i(TAG, "Verificação da interface agendada a cada $INTERVALO_HORAS h.")
         }
 
         /**
