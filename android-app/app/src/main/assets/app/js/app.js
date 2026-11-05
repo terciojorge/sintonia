@@ -2563,7 +2563,37 @@ var K = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, ENTER: 13, BACK: 461, ESC: 27, 
 // webOS ignores the box if it is unlocked and focused in the same moment: it needs a beat in between
 // and the first keyboard after launch may not answer at all, so it gets one more try
 var kbOpen = false;
+var campoSeq = 0;
+/* No Android o teclado vem de um diálogo nativo (MainActivity.abrirTeclado): o campo do WebView não abre o teclado do
+ * Fire TV de forma confiável. Os campos continuam readonly na navegação; só o OK/clique chama a digitação, então
+ * simplesmente passar o foco por um campo com o D-pad nunca abre nada. */
+function abrirTecladoNativo(a) {
+  if (!a.id) a.id = 'campo' + (++campoSeq); // o Android devolve o texto pelo id
+  var rotulo = a.getAttribute('placeholder') ||
+    (a.previousElementSibling && a.previousElementSibling.tagName === 'LABEL' ? a.previousElementSibling.textContent.split(' · ')[0] : '');
+  window.SintoniaBridge.abrirTeclado(a.value, a.id, rotulo || 'Digite o Texto', a.type === 'password');
+}
+// Resultado do diálogo nativo: texto === null quer dizer que o usuário cancelou.
+window.sintoniaTextoDigitado = function (id, texto) {
+  var a = document.getElementById(id);
+  if (!a) return;
+  a.focus({ preventScroll: true });
+  if (texto === null) return;
+  a.value = texto;
+  a.dispatchEvent(new Event('input', { bubbles: true })); // quem escuta o campo (busca, filtro) reage como se tivesse sido digitado
+  clearTimeout(searchT); // a busca é disparada logo abaixo; o adiamento do 'input' repetiria o trabalho
+  // o filtro da biblioteca redesenha a grade ~150 ms depois do 'input': só então o foco pode ir para o primeiro pôster
+  setTimeout(function () { if (document.body.contains(a)) confirmInput(a); }, a.id === 'libQ' ? 250 : 0);
+};
+// O que o OK/Enter faz depois de digitar em cada campo (igual para o teclado do WebView e para o diálogo nativo).
+function confirmInput(a) {
+  if (a.id === 'menuInput') { var o = $('#menu')._opts; o[0].fn(); }
+  else if (a.id === 'q') { clearTimeout(searchT); doSearch(a.value); stopEdit(a); }
+  else if (a.id === 'libQ') { var first = $('#gridWrap .poster'); if (first) focusEl(first); else stopEdit(a); }
+  else stopEdit(a);
+}
 function editInput(a, again) {
+  if (NATIVO && window.SintoniaBridge.abrirTeclado) { abrirTecladoNativo(a); return; }
   a.blur();
   setTimeout(function () {
     a.readOnly = false; a.focus();
@@ -2684,12 +2714,7 @@ document.addEventListener('keydown', function (e) {
   else if (k === K.RIGHT) { e.preventDefault(); move('right'); }
   else if (k === K.UP) { e.preventDefault(); move('up'); }
   else if (k === K.DOWN) { e.preventDefault(); move('down'); }
-  else if (k === K.ENTER && inInput) {
-    if (a.id === 'menuInput') { var o = $('#menu')._opts; o[0].fn(); }
-    else if (a.id === 'q') { doSearch(a.value); stopEdit(a); }
-    else if (a.id === 'libQ') { var first = $('#gridWrap .poster'); if (first) focusEl(first); else stopEdit(a); }
-    else stopEdit(a);
-  }
+  else if (k === K.ENTER && inInput) confirmInput(a);
 });
 document.addEventListener('keyup', function (e) { if (SC.down === e.keyCode) scrubUp(); });
 function setText2(sel, html) { var e = $(sel); if (e) e.innerHTML = html; }

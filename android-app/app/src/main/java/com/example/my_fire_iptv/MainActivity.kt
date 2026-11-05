@@ -10,10 +10,14 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.InputType
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
@@ -21,9 +25,11 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.EditText
 import android.widget.FrameLayout
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -106,6 +112,9 @@ class MainActivity : AppCompatActivity() {
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {
             // Sem ação: se for negada, o lembrete é agendado mesmo assim e o LembreteReceiver avisa que não pode exibir.
         }
+
+    /** Diálogo de digitação aberto no momento (só um por vez); `null` quando não há nenhum. */
+    private var dialogoTeclado: AlertDialog? = null
 
     /** A interface web já avisou, por [SintoniaBridge.interfaceCarregada], que iniciou de verdade? */
     @Volatile
@@ -391,6 +400,100 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------------------------------------
+    // Digitação: diálogo nativo com teclado do Fire TV
+    // ------------------------------------------------------------------------------------------
+
+    /**
+     * Abre um diálogo nativo com um [EditText] e força o teclado do Fire TV. Os campos de texto do
+     * WebView não abrem o teclado de forma confiável com o controle remoto; por isso a interface
+     * delega a digitação para cá.
+     *
+     * Ao confirmar (botão OK ou tecla "concluído" do teclado) o texto volta à interface em
+     * `window.sintoniaTextoDigitado(id, texto)`. Se o usuário cancelar (Voltar ou Cancelar), o
+     * JavaScript recebe `null` no lugar do texto. Deve ser chamado na thread principal.
+     *
+     * @param valorAtual texto que o campo já tem (aparece preenchido no diálogo)
+     * @param idDestino `id` do elemento HTML que receberá o texto
+     * @param titulo título do diálogo (ex.: a dica do campo)
+     * @param senha `true` para ocultar o que é digitado (campos de senha e chaves de API)
+     */
+    private fun mostrarDialogoTeclado(valorAtual: String, idDestino: String, titulo: String, senha: Boolean) {
+        if (isFinishing || isDestroyed) return
+        // Um segundo OK enquanto o diálogo já está aberto não deve empilhar outro.
+        if (dialogoTeclado?.isShowing == true) return
+
+        val campo = EditText(this).apply {
+            setText(valorAtual)
+            setSelection(text.length)
+            setSingleLine(true)
+            imeOptions = EditorInfo.IME_ACTION_DONE
+            inputType = InputType.TYPE_CLASS_TEXT or
+                if (senha) InputType.TYPE_TEXT_VARIATION_PASSWORD else InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
+        val margem = (24 * resources.displayMetrics.density).toInt()
+        val conteiner = FrameLayout(this).apply {
+            setPadding(margem, margem / 2, margem, 0)
+            addView(
+                campo,
+                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            )
+        }
+
+        var confirmado = false
+        val dialogo = AlertDialog.Builder(this)
+            .setTitle(titulo)
+            .setView(conteiner)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                confirmado = true
+                enviarTextoDigitado(idDestino, campo.text.toString())
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+
+        // "Concluído" no teclado equivale a clicar em OK.
+        campo.setOnEditorActionListener { _, acao, evento ->
+            val enter = evento != null && evento.keyCode == KeyEvent.KEYCODE_ENTER && evento.action == KeyEvent.ACTION_DOWN
+            if (acao == EditorInfo.IME_ACTION_DONE || enter) {
+                dialogo.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+                true
+            } else {
+                false
+            }
+        }
+        // Qualquer outra forma de fechar (Voltar, Cancelar, tocar fora) é cancelamento.
+        dialogo.setOnDismissListener {
+            if (dialogoTeclado === dialogo) dialogoTeclado = null
+            if (!confirmado) enviarTextoDigitado(idDestino, null)
+        }
+        dialogo.window?.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE or
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN
+        )
+
+        dialogoTeclado = dialogo
+        dialogo.show()
+        campo.requestFocus()
+        // Reforço: alguns Fire OS só abrem o teclado quando o pedido vem depois de o diálogo aparecer.
+        campo.post {
+            getSystemService(InputMethodManager::class.java)?.showSoftInput(campo, InputMethodManager.SHOW_IMPLICIT)
+        }
+    }
+
+    /**
+     * Devolve o resultado da digitação à interface (`window.sintoniaTextoDigitado(id, texto)`)
+     * e o foco ao WebView. [texto] `null` significa que o usuário cancelou.
+     */
+    private fun enviarTextoDigitado(id: String, texto: String?) {
+        webView.requestFocus()
+        if (!paginaCarregada) return
+        val argumentoTexto = if (texto == null) "null" else literalJs(texto)
+        webView.evaluateJavascript(
+            "if (window.sintoniaTextoDigitado) window.sintoniaTextoDigitado(${literalJs(id)}, $argumentoTexto);",
+            null
+        )
+    }
+
+    // ------------------------------------------------------------------------------------------
     // Servidor de pareamento (NanoHTTPD)
     // ------------------------------------------------------------------------------------------
 
@@ -647,6 +750,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        // Fecha o diálogo de digitação sem avisar a interface (ela está sendo destruída junto).
+        dialogoTeclado?.setOnDismissListener(null)
+        dialogoTeclado?.dismiss()
+        dialogoTeclado = null
         EstadoReproducao.reproduzindo = false
         servidor.stop()
         handlerPrincipal.removeCallbacksAndMessages(null)
@@ -709,6 +816,24 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun verificarAtualizacaoInterface() {
             runOnUiThread { verificarAtualizacaoAgora() }
+        }
+
+        /**
+         * Abre o diálogo nativo de digitação (com o teclado do Fire TV) para um campo da interface.
+         * O texto digitado volta em `window.sintoniaTextoDigitado(idElementoDestino, texto)`;
+         * `texto` é `null` se o usuário cancelar.
+         */
+        @JavascriptInterface
+        fun abrirTeclado(valorAtual: String?, idElementoDestino: String?, titulo: String?, senha: Boolean) {
+            if (idElementoDestino.isNullOrBlank()) {
+                Log.w(TAG, "abrirTeclado() chamado sem id do campo; ignorado.")
+                return
+            }
+            runOnUiThread {
+                mostrarDialogoTeclado(
+                    valorAtual.orEmpty(), idElementoDestino, titulo.orEmpty().ifBlank { "Digite o texto" }, senha
+                )
+            }
         }
 
         /** Recarrega a interface (usa a versão baixada mais recente), por exemplo após uma atualização. */
