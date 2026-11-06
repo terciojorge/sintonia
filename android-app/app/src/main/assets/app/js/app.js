@@ -1237,6 +1237,8 @@ function doSearch(text) {
   if (mov.length) { html += '<div class="section-title">Filmes (' + mov.length + ')</div><div class="posters">'; mov.forEach(function (i) { html += posterHTML(i, idx++); }); html += '</div>'; }
   if (ser.length) { html += '<div class="section-title">Séries (' + ser.length + ')</div><div class="posters">'; ser.forEach(function (i) { html += posterHTML(i, idx++); }); html += '</div>'; }
   paint(wrap, html || '<div class="empty">Nada Encontrado para "' + esc(text) + '".</div>');
+  // marca comum dos resultados (canais, filmes e séries): o D-pad usa para pular de uma categoria para a outra (ver move)
+  $$('.ch, .poster', wrap).forEach(function (el) { el.classList.add('search-item'); });
 }
 
 /* Ajustes: sections on the left, the chosen one on the right. Moving over a section shows it, OK or right enters it */
@@ -2452,6 +2454,16 @@ function scope() {
   return $('#app');
 }
 function visible(el) { if (!el.offsetParent && el.tagName !== 'BODY') return false; var r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; }
+/* Resultados da busca: cada categoria (canais, filmes, séries) é um contêiner irmão; devolve o primeiro item visível
+ * do próximo contêiner abaixo, ou null se a categoria atual é a última. */
+function primeiroDaProximaCategoria(contenedor) {
+  for (var s = contenedor.nextElementSibling; s; s = s.nextElementSibling) {
+    if (!s.matches('.channels, .posters')) continue; // pula os títulos de seção
+    var primeiro = $$('.search-item', s).filter(visible)[0];
+    if (primeiro) return primeiro;
+  }
+  return null;
+}
 function move(dir) {
   var sc = scope(), cur = document.activeElement;
   var els = $$('.f', sc).filter(visible);
@@ -2467,6 +2479,12 @@ function move(dir) {
     if (dir === 'down') {
       els = mine;
       if (col._items && col._shown < col._items.length && !mine.some(function (el) { return el.getBoundingClientRect().top >= box.bottom - 4; })) { growGrid(col); els = $$('.f', col).filter(visible); }
+      // Busca: na última linha da categoria (ex.: Filmes) o foco segue para o primeiro item da próxima (ex.: Séries),
+      // em vez de ficar preso; na última categoria ele para, como nas outras telas
+      if (cur.classList.contains('search-item') && !els.some(function (el) { return el.getBoundingClientRect().top >= box.bottom - 4; })) {
+        var seguinte = primeiroDaProximaCategoria(col);
+        if (seguinte) { focusEl(seguinte); return; }
+      }
     } else if (mine.some(function (el) { return el.getBoundingClientRect().bottom <= box.top + 4; })) els = mine;
   }
   if (cur.classList.contains('setsec')) {

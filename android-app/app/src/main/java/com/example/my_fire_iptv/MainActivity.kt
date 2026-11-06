@@ -174,6 +174,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        // Mantém a tela ligada enquanto o app está visível: sem isso a Fire TV ativa o protetor de tela
+        // no meio de um filme. O sistema solta o bloqueio sozinho ao sair do app.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         entrarEmTelaCheia()
 
         playerView = findViewById(R.id.playerView)
