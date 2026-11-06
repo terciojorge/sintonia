@@ -1,0 +1,14 @@
+{
+  "id": "com.atl.player",
+  "version": "2.5.0",
+  "vendor": "Atl",
+  "type": "web",
+  "main": "index.html",
+  "title": "Sintonia",
+  "icon": "sintonia-icon.png",
+  "largeIcon": "sintonia-large.png",
+  "bgColor": "#000000",
+  "resolution": "1920x1080",
+  "disableBackHistoryAPI": true,
+  "handlesRelaunch": true
+}

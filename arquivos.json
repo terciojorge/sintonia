@@ -1,0 +1,50 @@
+{
+ "versao": "705b4a3f9b6a80e13267a8132b8b6cfd13275477",
+ "arquivos": [
+  {
+   "caminho": "appinfo.json",
+   "tamanho": 315,
+   "sha256": "4488a24dc56815025b782ba884ecc5f1d51a63ae0945bdac108549091d1451c9"
+  },
+  {
+   "caminho": "css/app.css",
+   "tamanho": 27655,
+   "sha256": "325eed4c1330b5e9961a4974b946abd02dc64d96f01e71958e33a610f7340c00"
+  },
+  {
+   "caminho": "index.html",
+   "tamanho": 5406,
+   "sha256": "8168fac590936e133d8a317b34e63c7f1e169881673599e624fc4042e18cff60"
+  },
+  {
+   "caminho": "js/app.js",
+   "tamanho": 191911,
+   "sha256": "a458965a314ef9d3317d24b05fed0668b59879ab560fdc8a344097949c3fd4cb"
+  },
+  {
+   "caminho": "js/hls.min.js",
+   "tamanho": 623915,
+   "sha256": "cfc70cc9e9fc63d071919e087670abc760c8fd1bc889b88588026e4d22193bbe"
+  },
+  {
+   "caminho": "js/logos.js",
+   "tamanho": 162853,
+   "sha256": "cdc686c7bd6644128c618cf158aa09a847cd571e421c767b3e05cc451f5ea724"
+  },
+  {
+   "caminho": "js/qrcode.js",
+   "tamanho": 56694,
+   "sha256": "18ae399f81182bc9de916e9c77b195df20cc58d6f2d55a62b085a299f1bf1780"
+  },
+  {
+   "caminho": "sintonia-icon.png",
+   "tamanho": 7125,
+   "sha256": "6e2e6787ec3a44640bcde805b60849ca817ad6d361881a4d34e501ce16afa41a"
+  },
+  {
+   "caminho": "sintonia-large.png",
+   "tamanho": 16181,
+   "sha256": "95d2b3350faa015fb82656a7a4f51825dde3b9b32c153cf21d23a6187068db42"
+  }
+ ]
+}
