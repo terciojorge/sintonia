@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Tela única do app, em camadas:
-      1. PlayerView (Media3/ExoPlayer) no fundo: desenha o vídeo nativo.
-      2. WebView por cima, transparente: desenha a interface web e deixa o vídeo aparecer por trás.
+    Tela única do app, em camadas (de baixo para cima):
+      1. PlayerView (Media3/ExoPlayer): desenha o vídeo nativo.
+      2. WebView, transparente: desenha a interface web e deixa o vídeo aparecer por trás.
+      3. ImageView da abertura (splashScreen): cobre a WebView até a interface avisar que carregou.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -31,5 +32,16 @@
         android:background="@android:color/transparent"
         android:focusable="true"
         android:focusableInTouchMode="true" />
+
+    <!-- Imagem de abertura por cima de tudo. Não recebe foco: o controle remoto continua indo para a WebView. -->
+    <ImageView
+        android:id="@+id/splashScreen"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:focusable="false"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop"
+        android:src="@drawable/splash" />
 
 </FrameLayout>

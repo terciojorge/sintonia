@@ -2,6 +2,7 @@ package com.example.my_fire_iptv
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ComponentCallbacks2
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
@@ -27,6 +28,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -120,6 +122,12 @@ class MainActivity : AppCompatActivity() {
     @Volatile
     private var interfaceSinalizou = false
 
+    /** Imagem de abertura sobre a WebView; some em `onPageFinished`, quando o HTML termina de carregar. */
+    private lateinit var splashScreen: ImageView
+
+    /** Reserva: se a página nunca terminar de carregar, a imagem de abertura sai sozinha para não prender o usuário. */
+    private val removerSplashPorTempo = Runnable { esconderSplash() }
+
     /** Confere, um tempo depois do carregamento, se a interface baixada realmente iniciou. */
     private val vigiaDaInterface = Runnable {
         if (!interfaceSinalizou && estaNaInterfaceBaixada()) {
@@ -181,6 +189,8 @@ class MainActivity : AppCompatActivity() {
 
         playerView = findViewById(R.id.playerView)
         webView = findViewById(R.id.webview)
+        splashScreen = findViewById(R.id.splashScreen)
+        handlerPrincipal.postDelayed(removerSplashPorTempo, TEMPO_MAXIMO_SPLASH_MS)
         lembreteDeAbertura = intent?.getStringExtra(AgendadorLembretes.EXTRA_ID)
 
         // Uma interface baixada por um APK anterior não pode esconder a que veio neste APK.
@@ -221,6 +231,17 @@ class MainActivity : AppCompatActivity() {
     // ------------------------------------------------------------------------------------------
     // Interface web: cópia baixada (OTA) com reserva empacotada no APK
     // ------------------------------------------------------------------------------------------
+
+    /** Tira a imagem de abertura: fade-out e, no fim, GONE (assim ela não bloqueia os cliques do D-pad). */
+    private fun esconderSplash() {
+        handlerPrincipal.removeCallbacks(removerSplashPorTempo)
+        if (!::splashScreen.isInitialized || splashScreen.visibility != View.VISIBLE) return
+        splashScreen.animate()
+            .alpha(0f)
+            .setDuration(DURACAO_FADE_SPLASH_MS)
+            .withEndAction { splashScreen.visibility = View.GONE }
+            .start()
+    }
 
     /** Abre a interface baixada, se válida; senão a empacotada no APK. */
     private fun carregarInterface() {
@@ -594,6 +615,8 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView, url: String) {
                 paginaCarregada = true
                 view.requestFocus()
+                // O HTML terminou de carregar: a imagem de abertura sai (fade-out e depois GONE, para não bloquear o D-pad).
+                esconderSplash()
                 // Interface baixada: se em alguns segundos o JavaScript não avisar que iniciou, volta para a do APK.
                 if (ehInterfaceBaixada(url) && !interfaceSinalizou) {
                     handlerPrincipal.postDelayed(vigiaDaInterface, TEMPO_VIGIA_INTERFACE_MS)
@@ -757,6 +780,7 @@ class MainActivity : AppCompatActivity() {
         dialogoTeclado?.setOnDismissListener(null)
         dialogoTeclado?.dismiss()
         dialogoTeclado = null
+        handlerPrincipal.removeCallbacks(removerSplashPorTempo)
         EstadoReproducao.reproduzindo = false
         servidor.stop()
         handlerPrincipal.removeCallbacksAndMessages(null)
@@ -764,11 +788,32 @@ class MainActivity : AppCompatActivity() {
         playerView.player = null
         exoPlayer.release()
 
+        // Apaga o cache de rede (capas do TMDB/OMDb etc.) ao fechar o app: o armazenamento da Fire TV é pequeno.
+        // Dados do app (localStorage, favoritos, lista) não fazem parte desse cache e são mantidos.
+        webView.clearCache(true)
+
         // Libera o WebView para evitar vazamento de memória.
         (webView.parent as? ViewGroup)?.removeView(webView)
         webView.removeJavascriptInterface(NOME_PONTE_JS)
         webView.destroy()
         super.onDestroy()
+    }
+
+    /**
+     * O Fire OS avisa quando a memória está acabando. Em nível crítico ou baixo (com o app em primeiro plano)
+     * o cache do WebView é limpo na hora, sem fechar o app; as capas já na tela continuam e as demais são baixadas de novo.
+     */
+    @Suppress("DEPRECATION")
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL ||
+            level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW
+        ) {
+            if (::webView.isInitialized) {
+                Log.w(TAG, "Pouca memória (nível $level); limpando o cache do WebView.")
+                webView.clearCache(true)
+            }
+        }
     }
 
     // ------------------------------------------------------------------------------------------
@@ -979,6 +1024,10 @@ class MainActivity : AppCompatActivity() {
 
         /** Tempo que a interface baixada tem, após carregar, para sinalizar que iniciou. */
         const val TEMPO_VIGIA_INTERFACE_MS = 10_000L
+
+        /** Tempo máximo da imagem de abertura (maior que a vigia da interface, que pode recarregar a empacotada). */
+        const val TEMPO_MAXIMO_SPLASH_MS = 20_000L
+        const val DURACAO_FADE_SPLASH_MS = 500L
 
         // Status enviados à interface web em `window.sintoniaStatusVideo`.
         const val STATUS_CARREGANDO = "BUFFERING"

@@ -22,6 +22,7 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
+        android:logo="@drawable/banner"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
@@ -32,7 +33,11 @@
         <!-- singleTask: tocar na notificação de lembrete reaproveita a tela já aberta (onNewIntent) -->
         <activity
             android:name=".MainActivity"
+            android:banner="@drawable/banner"
             android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/app_name"
+            android:logo="@drawable/banner"
             android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

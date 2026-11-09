@@ -3,5 +3,7 @@
     <style name="Base.Theme.Myfireiptv" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Customize your dark theme here. -->
         <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
+        <!-- Fundo escuro desde o primeiro quadro: evita o flash branco antes da imagem de abertura aparecer. -->
+        <item name="android:windowBackground">@color/black</item>
     </style>
 </resources>
